@@ -1,0 +1,110 @@
+package user
+
+import (
+	"sirendaou.com/duserver/common"
+	"sirendaou.com/duserver/common/errors"
+)
+
+type UserInfo struct {
+	Uid          uint64
+	Password     string
+	PhoneNum     string
+	RegisterDate string
+	UpdateDate   string
+	// 用户终端信息
+	Platform string `bson:"platform"`
+	DeviceId string `bson:"deviceid"`
+	// 用户基本信息
+	// sex  string
+}
+
+//User System
+func SaveUserInfo(user *UserInfo) error {
+	sqlStr := `INSERT INTO t_user_info(uid, password, phonenum, register_date, update_date) VALUES(?, ?, ?, now(), now())`
+	uid, err := common.MysqlExecRet(sqlStr, user.Uid, user.Password, user.PhoneNum)
+	if err != nil {
+		return errors.As(err, *user)
+	}
+	user.Uid = uid
+	return nil
+}
+
+func (user *UserInfo) Field() []interface{} {
+	return []interface{}{
+		&user.Uid,
+		&user.Password,
+		&user.PhoneNum,
+		&user.RegisterDate,
+		&user.UpdateDate,
+	}
+}
+
+func GetUserInfo(sel map[string]interface{}) (*UserInfo, error) {
+	user := &UserInfo{}
+	if sel == nil {
+		sel = map[string]interface{}{}
+	}
+
+	selectSql := `
+		SELECT
+			 uid, password, phonenum, register_date, update_date
+		FROM
+			t_user_info
+		WHERE 1 = 1 
+	`
+	args := []interface{}{}
+	if sel != nil {
+		for key, val := range sel {
+			selectSql += " and " + key + " = ?"
+			args = append(args, val)
+		}
+	}
+	selectSql += " limit 1"
+	row, err := common.MysqlQuery(selectSql, args...)
+	if err != nil {
+		return nil, errors.As(err, sel)
+	}
+	defer row.Close()
+
+	if row.Next() {
+		if err := row.Scan(user.Field()...); err != nil {
+			return nil, errors.As(err, sel)
+		}
+		return user, nil
+	}
+
+	return nil, errors.ERR_NO_DATA
+}
+
+func GetUserInfoByUid(uid uint64) (*UserInfo, error) {
+	return GetUserInfo(map[string]interface{}{
+		"uid": uid,
+	})
+}
+
+func GetUserInfoByPhoneNum(phonenum string) (*UserInfo, error) {
+	return GetUserInfo(map[string]interface{}{
+		"phonenum": phonenum,
+	})
+}
+
+func ModifyUserPwdByUid(uid uint64, pwd string) error {
+	sqlStr := `UPDATE t_user_info SET password = ? WHERE uid = ?`
+	if err := common.MysqlExec(sqlStr, pwd, uid); err != nil {
+		return errors.As(err, uid, pwd)
+	}
+	return nil
+}
+
+func ModifyUserPwdByPhoneNum(phonenum, pwd string) error {
+	sqlStr := `UPDATE t_user_info SET password = ? WHERE phonenum = ?`
+	if err := common.MysqlExec(sqlStr, pwd, phonenum); err != nil {
+		return errors.As(err, phonenum, pwd)
+	}
+	return nil
+}
+
+func DeleteUserInfoByUid(uid uint64) {
+	sqlStr := "delete from t_user_info where uid = ?"
+	common.MysqlExec(sqlStr, uid)
+}
